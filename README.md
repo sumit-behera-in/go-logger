@@ -1,6 +1,6 @@
 # Go Logger
 
-`go_logger` is a simple, flexible logging package for Go applications. It allows you to log messages at various log levels (DEBUG, INFO, WARN, ERROR, FATAL) with timestamps in **Indian Standard Time (IST)**. The log entries include the application name, log level, and message.
+`goLogger` is a simple, flexible logging package for Go applications. It allows you to log messages at various log levels (DEBUG, INFO, WARN, ERROR, FATAL) with timestamps in **Indian Standard Time (IST)**. The log entries include the application name, log level, and message.
 
 ## Features
 
@@ -12,12 +12,12 @@
 
 ## Installation
 
-To use `go_logger` in your Go project, simply include it as part of your project structure. If you're using Go modules, you can use `go get` to fetch it.
+To use `goLogger` in your Go project, simply include it as part of your project structure. If you're using Go modules, you can use `go get` to fetch it.
 
 1. Create a Go module or navigate to your existing Go project.
 2. Run the following command to install the package:
    ```bash
-   go get github.com/sumit-behera-in/go_logger
+   go get github.com/sumit-behera-in/goLogger
    ```
 
 ## Usage
@@ -31,12 +31,12 @@ package main
 
 import (
 	"log"
-	"github.com/sumit-behera-in/go_logger"
+	"github.com/sumit-behera-in/goLogger"
 )
 
 func main() {
 	// Initialize the logger with your application name
-	logger, err := go_logger.NewLogger("MyApp")
+	logger, err := goLogger.NewLogger("MyApp")
 	if err != nil {
 		log.Fatalf("Error initializing logger: %v", err)
 	}
@@ -90,7 +90,7 @@ Here's an example of the output format for each log level:
 If there is an issue loading the IST location (e.g., incorrect time zone), the logger will return an error, which you should handle appropriately. Example:
 
 ```go
-logger, err := go_logger.NewLogger("MyApp")
+logger, err := goLogger.NewLogger("MyApp")
 if err != nil {
 	log.Fatalf("Error initializing logger: %v", err)
 }
