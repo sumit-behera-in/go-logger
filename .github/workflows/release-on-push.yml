@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      APP_NAME: goRepoTemplate # Define the application name here
-      APP_VERSION: template-v0.0.1 # Define the application version
+      APP_NAME: goLogger # Define the application name here
+      APP_VERSION: v0.0.1 # Define the application version
 
     steps:
       # Step 1: Checkout the code
@@ -39,8 +39,8 @@ jobs:
             bin/${{ env.APP_NAME }}-darwin
             bin/${{ env.APP_NAME }}-windows.exe
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: v${{ env.APP_VERSION }}
-          name: v${{ env.APP_VERSION }}
+          tag: ${{ env.APP_VERSION }}
+          name: ${{ env.APP_VERSION }}
           body: |
             Automated release for commit ${{ github.sha }}
           prerelease: false
