@@ -41,7 +41,11 @@ func NewLogger(appName, logFilePath string) (*Logger, error) {
 			}
 		}
 
-		defer logOutput.Close()
+		defer func() {
+			if logOutput != os.Stdout {
+				logOutput.Close()
+			}
+		}()
 
 		logOutput, err = os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
@@ -87,52 +91,66 @@ func (l *Logger) addToBuffer(msg string) {
 	l.logBuffer = append(l.logBuffer, msg)
 	if l.bufferCount >= l.bufferSize {
 		l.bufferCount = 0
-		go l.flushBuffer() // Flush in a separate goroutine to avoid blocking
+
+		// Generate the timestamped new file name
+		renamedFilePath := l.logFilePath + fmt.Sprint(l.flushCount) + ".log"
+		l.flushCount++
+
+		// Attempt to rename the log file
+		err := os.Rename(l.logFilePath, renamedFilePath)
+		if err != nil {
+			log.Printf("Error renaming log file: %v", err)
+			return
+		}
+
+		// Confirm that the file has been renamed
+		println("Renamed log file to:", renamedFilePath)
+
+		// Reopen the original log file for appending new logs
+		file, err := os.OpenFile(l.logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			log.Printf("Error opening log file: %v", err)
+			return
+		}
+		defer file.Close()
+
+		// Create a new logger with the updated file
+		l.logger = log.New(file, "", 0)
+
+		// Write buffered log messages to the new file
+		for _, msg := range l.logBuffer {
+			_, err := file.WriteString(msg + "\n")
+			if err != nil {
+				log.Printf("Error writing to log file: %v", err)
+				return
+			}
+		}
+
+		// Clear the log buffer after writing
+		l.logBuffer = []string{}
 	}
 }
 
-// flushBuffer safely writes buffered logs to the file
-func (l *Logger) flushBuffer() {
-	l.bufferMu.Lock()
-	defer l.bufferMu.Unlock()
+// logMessagef writes a formatted log message with a level
+func (l *Logger) logMessagef(levelName, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	l.logMessage(levelName, msg)
+}
 
-	if len(l.logBuffer) == 0 {
-		return
+// fatalFlush writes a fatal log message directly to `fatal-log.log`
+func (l *Logger) fatalFlush(msg string) {
+	fatalLogFile := "fatal-log.log"
+
+	if _, err := os.Stat(fatalLogFile); err == nil {
+		os.Remove(fatalLogFile)
 	}
 
-	// Generate the timestamped new file name
-	renamedFilePath := l.logFilePath + fmt.Sprint(l.flushCount) + ".log"
-	l.flushCount++
-
-	// Close any open file before renaming
-	// No need to open the file for renaming; just close the previous file handle.
-	if l.logger != nil && l.logger.Writer() != nil {
-		// Close the existing file handle
-		if file, ok := l.logger.Writer().(*os.File); ok {
-			file.Close()
-		}
-	}
-
-	// Attempt to rename the log file
-	err := os.Rename(l.logFilePath, renamedFilePath)
+	file, err := os.OpenFile(fatalLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
-		log.Printf("Error renaming log file: %v", err)
-		return
-	}
-
-	// Confirm that the file has been renamed
-	println("Renamed log file to:", renamedFilePath)
-
-	// Reopen the original log file for appending new logs
-	file, err := os.OpenFile(l.logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Printf("Error opening log file: %v", err)
+		fmt.Printf("Error opening fatal log file: %v\n", err)
 		return
 	}
 	defer file.Close()
-
-	// Create a new logger with the updated file
-	l.logger = log.New(file, "", 0)
 
 	// Write buffered log messages to the new file
 	for _, msg := range l.logBuffer {
@@ -145,23 +163,6 @@ func (l *Logger) flushBuffer() {
 
 	// Clear the log buffer after writing
 	l.logBuffer = []string{}
-}
-
-// logMessagef writes a formatted log message with a level
-func (l *Logger) logMessagef(levelName, format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	l.logMessage(levelName, msg)
-}
-
-// fatalFlush writes a fatal log message directly to `fatal-log.log`
-func (l *Logger) fatalFlush(msg string) {
-	fatalLogFile := "fatal-log.log"
-	file, err := os.OpenFile(fatalLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		fmt.Printf("Error opening fatal log file: %v\n", err)
-		return
-	}
-	defer file.Close()
 
 	_, err = file.WriteString(msg + "\n")
 	if err != nil {
@@ -235,6 +236,6 @@ func (l *Logger) Fatalf(format string, args ...interface{}) {
 // Close flushes any remaining buffer
 func (l *Logger) Close() {
 	if l.useBuffer {
-		l.flushBuffer()
+		l.fatalFlush("Closing logger")
 	}
 }

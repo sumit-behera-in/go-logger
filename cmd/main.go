@@ -15,7 +15,7 @@ func main() {
 
 	wg := sync.WaitGroup{}
 
-	for i := 0; i < 505; i++ {
+	for i := 0; i < 800; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -31,6 +31,6 @@ func main() {
 	}
 
 	wg.Wait()
-	logger.Close()
+	defer logger.Close()
 
 }
