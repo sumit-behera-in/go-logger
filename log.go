@@ -10,17 +10,17 @@ import (
 
 // Logger struct for the logger
 type Logger struct {
-	appName        string
-	logger         *log.Logger
-	timeLocation   *time.Location
-	logBuffer      []string
-	logFilePath    string
-	bufferSize     int
-	useBuffer      bool
-	flushCount     int
-	flushThreshold int
-	mu             sync.RWMutex  // Protects logger state (non-buffer operations)
-	bufferMu       sync.Mutex    // Protects logBuffer for buffered operations
+	appName      string
+	logger       *log.Logger
+	timeLocation *time.Location
+	logBuffer    []string
+	logFilePath  string
+	bufferSize   int
+	useBuffer    bool
+	mu           sync.RWMutex // Protects logger state (non-buffer operations)
+	bufferMu     sync.Mutex   // Protects logBuffer for buffered operations
+	bufferCount  int
+	flushCount   int
 }
 
 // NewLogger creates a new logger instance
@@ -33,6 +33,16 @@ func NewLogger(appName, logFilePath string) (*Logger, error) {
 	var logOutput *os.File
 	useBuffer := false
 	if logFilePath != "" {
+		// Check if the log file exists, and delete it if it does
+		if _, err := os.Stat(logFilePath); err == nil {
+			err := os.Remove(logFilePath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete existing log file: %v", err)
+			}
+		}
+
+		defer logOutput.Close()
+
 		logOutput, err = os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file: %v", err)
@@ -43,15 +53,14 @@ func NewLogger(appName, logFilePath string) (*Logger, error) {
 	}
 
 	return &Logger{
-		appName:        appName,
-		logger:         log.New(logOutput, "", 0),
-		timeLocation:   timeLocation,
-		logBuffer:      []string{},
-		logFilePath:    logFilePath,
-		bufferSize:     1000,
-		useBuffer:      useBuffer,
-		flushCount:     0,
-		flushThreshold: 2,
+		appName:      appName,
+		logger:       log.New(logOutput, "", 0),
+		timeLocation: timeLocation,
+		logBuffer:    []string{},
+		logFilePath:  logFilePath,
+		bufferSize:   1000,
+		bufferCount:  0,
+		useBuffer:    useBuffer,
 	}, nil
 }
 
@@ -74,8 +83,10 @@ func (l *Logger) addToBuffer(msg string) {
 	l.bufferMu.Lock()
 	defer l.bufferMu.Unlock()
 
+	l.bufferCount++
 	l.logBuffer = append(l.logBuffer, msg)
-	if len(l.logBuffer) >= l.bufferSize {
+	if l.bufferCount >= l.bufferSize {
+		l.bufferCount = 0
 		go l.flushBuffer() // Flush in a separate goroutine to avoid blocking
 	}
 }
@@ -89,6 +100,30 @@ func (l *Logger) flushBuffer() {
 		return
 	}
 
+	// Generate the timestamped new file name
+	renamedFilePath := l.logFilePath + fmt.Sprint(l.flushCount) + ".log"
+	l.flushCount++
+
+	// Close any open file before renaming
+	// No need to open the file for renaming; just close the previous file handle.
+	if l.logger != nil && l.logger.Writer() != nil {
+		// Close the existing file handle
+		if file, ok := l.logger.Writer().(*os.File); ok {
+			file.Close()
+		}
+	}
+
+	// Attempt to rename the log file
+	err := os.Rename(l.logFilePath, renamedFilePath)
+	if err != nil {
+		log.Printf("Error renaming log file: %v", err)
+		return
+	}
+
+	// Confirm that the file has been renamed
+	println("Renamed log file to:", renamedFilePath)
+
+	// Reopen the original log file for appending new logs
 	file, err := os.OpenFile(l.logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Printf("Error opening log file: %v", err)
@@ -96,6 +131,10 @@ func (l *Logger) flushBuffer() {
 	}
 	defer file.Close()
 
+	// Create a new logger with the updated file
+	l.logger = log.New(file, "", 0)
+
+	// Write buffered log messages to the new file
 	for _, msg := range l.logBuffer {
 		_, err := file.WriteString(msg + "\n")
 		if err != nil {
@@ -103,6 +142,8 @@ func (l *Logger) flushBuffer() {
 			return
 		}
 	}
+
+	// Clear the log buffer after writing
 	l.logBuffer = []string{}
 }
 
