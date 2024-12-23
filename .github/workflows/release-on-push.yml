@@ -16,7 +16,7 @@ jobs:
 
     env:
       APP_NAME: goLogger # Define the application name here
-      APP_VERSION: v1.0.0 # Define the application version
+      APP_VERSION: v1.0.1 # Define the application version
 
     steps:
       # Step 1: Checkout the code
