@@ -1,9 +1,9 @@
-2024-12-24 15:09:47 IST [DEBUG] test: This is a formatted debug message with args: arg1
-2024-12-24 15:09:47 IST [INFO] test: This is a formatted info message with args: arg1
-2024-12-24 15:09:47 IST [WARN] test: This is a formatted warn message with args: arg1
-2024-12-24 15:09:47 IST [ERROR] test: This is a formatted error message with args: arg1
-2024-12-24 15:09:47 IST [DEBUG] test: This is a debug message
-2024-12-24 15:09:47 IST [INFO] test: This is a info message
-2024-12-24 15:09:47 IST [WARN] test: This is a warn message
-2024-12-24 15:09:47 IST [ERROR] test: This is a error message
+2024-12-24 15:24:49 IST [DEBUG] test: This is a formatted debug message with args: arg1
+2024-12-24 15:24:49 IST [INFO] test: This is a formatted info message with args: arg1
+2024-12-24 15:24:49 IST [WARN] test: This is a formatted warn message with args: arg1
+2024-12-24 15:24:49 IST [ERROR] test: This is a formatted error message with args: arg1
+2024-12-24 15:24:49 IST [DEBUG] test: This is a debug message
+2024-12-24 15:24:49 IST [INFO] test: This is a info message
+2024-12-24 15:24:49 IST [WARN] test: This is a warn message
+2024-12-24 15:24:49 IST [ERROR] test: This is a error message
 Closing logger

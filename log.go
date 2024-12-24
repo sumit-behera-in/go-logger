@@ -10,34 +10,40 @@ import (
 
 // Logger struct for the logger
 type Logger struct {
-	appName      string
-	logger       *log.Logger
-	timeLocation *time.Location
-	logBuffer    []string
-	logFilePath  string
-	bufferSize   int
-	useBuffer    bool
-	mu           sync.RWMutex // Protects logger state (non-buffer operations)
-	bufferMu     sync.Mutex   // Protects logBuffer for buffered operations
-	bufferCount  int
-	flushCount   int
+	appName        string
+	logger         *log.Logger
+	timeLocation   *time.Location
+	timeFormat     string
+	logBuffer      []string
+	logFileDir     string
+	bufferSize     int
+	useBuffer      bool
+	mu             sync.RWMutex // Protects logger state (non-buffer operations)
+	bufferMu       sync.Mutex   // Protects logBuffer for buffered operations
+	bufferCount    int
+	flushCount     int
+	logBackupCount int
 }
 
 // NewLogger creates a new logger instance
-func NewLogger(appName, logFilePath string) (*Logger, error) {
-	timeLocation, err := time.LoadLocation("Asia/Calcutta")
-	if err != nil {
-		return nil, fmt.Errorf("failed to load IST location: %v", err)
+func NewLogger(appName, logFileDir string, bufferSize int, logBackupCount int, timeZone string) (*Logger, error) {
+	timeLocation, timeFormat := loadTimeZone(timeZone)
+
+	if logBackupCount < 2 {
+		logBackupCount = 2
 	}
 
 	var logOutput *os.File
 	useBuffer := false
-	if logFilePath != "" {
+	if logFileDir != "" {
 		// Check if the log file exists, and delete it if it does
-		if _, err := os.Stat(logFilePath); err == nil {
-			err := os.Remove(logFilePath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to delete existing log file: %v", err)
+		if logFileDir != "" {
+			if _, err := os.Stat(logFileDir); err == nil {
+				os.RemoveAll(logFileDir)
+			}
+
+			if err := os.MkdirAll(logFileDir, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create log directory: %v", err)
 			}
 		}
 
@@ -46,25 +52,21 @@ func NewLogger(appName, logFilePath string) (*Logger, error) {
 				logOutput.Close()
 			}
 		}()
-
-		logOutput, err = os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open log file: %v", err)
-		}
 		useBuffer = true
 	} else {
 		logOutput = os.Stdout
 	}
 
 	return &Logger{
-		appName:      appName,
-		logger:       log.New(logOutput, "", 0),
-		timeLocation: timeLocation,
-		logBuffer:    []string{},
-		logFilePath:  logFilePath,
-		bufferSize:   1000,
-		bufferCount:  0,
-		useBuffer:    useBuffer,
+		appName:        appName,
+		logger:         log.New(logOutput, "", 0),
+		timeLocation:   timeLocation,
+		timeFormat:     " " + timeFormat,
+		logBuffer:      []string{},
+		logFileDir:     logFileDir,
+		bufferSize:     bufferSize,
+		useBuffer:      useBuffer,
+		logBackupCount: logBackupCount,
 	}, nil
 }
 
@@ -73,7 +75,7 @@ func (l *Logger) logMessage(levelName, msg string) {
 	l.mu.RLock() // Allow concurrent reads
 	defer l.mu.RUnlock()
 
-	timestamp := time.Now().In(l.timeLocation).Format("2006-01-02 15:04:05") + " IST"
+	timestamp := time.Now().In(l.timeLocation).Format("2006-01-02 15:04:05") + l.timeFormat
 	logMsg := fmt.Sprintf("%s [%s] %s: %s", timestamp, levelName, l.appName, msg)
 
 	if l.useBuffer && levelName != "FATAL" { // Don't buffer fatal messages
@@ -93,21 +95,10 @@ func (l *Logger) addToBuffer(msg string) {
 		l.bufferCount = 0
 
 		// Generate the timestamped new file name
-		renamedFilePath := l.logFilePath + fmt.Sprint(l.flushCount) + ".log"
-		l.flushCount++
-
-		// Attempt to rename the log file
-		err := os.Rename(l.logFilePath, renamedFilePath)
-		if err != nil {
-			log.Printf("Error renaming log file: %v", err)
-			return
-		}
-
-		// Confirm that the file has been renamed
-		println("Renamed log file to:", renamedFilePath)
+		logFilePath := l.logFileDir + "/" + fmt.Sprintf("%d.log", l.flushCount)
 
 		// Reopen the original log file for appending new logs
-		file, err := os.OpenFile(l.logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			log.Printf("Error opening log file: %v", err)
 			return
@@ -125,6 +116,9 @@ func (l *Logger) addToBuffer(msg string) {
 				return
 			}
 		}
+
+		l.flushCount++ // Increment the flush count
+		l.flushCount %= l.logBackupCount
 
 		// Clear the log buffer after writing
 		l.logBuffer = []string{}
@@ -215,7 +209,7 @@ func (l *Logger) Fatal(msg string) {
 	l.mu.Lock() // Lock to ensure thread-safe fatal logging
 	defer l.mu.Unlock()
 
-	timestamp := time.Now().In(l.timeLocation).Format("2006-01-02 15:04:05") + " IST"
+	timestamp := time.Now().In(l.timeLocation).Format("2006-01-02 15:04:05") + l.timeFormat
 	fatalMsg := fmt.Sprintf("%s [FATAL] %s: %s", timestamp, l.appName, msg)
 
 	// Log fatal directly without buffering
